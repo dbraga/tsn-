@@ -1,0 +1,112 @@
+#! /usr/bin/env python
+import feedparser
+import dateutil.parser
+import os
+import unicodedata
+import smtplib
+from email.MIMEMultipart import MIMEMultipart
+from email.MIMEBase import MIMEBase
+from email.MIMEText import MIMEText
+from email import Encoders
+
+
+my_email = ""
+gmail_user = my_email
+gmail_pwd = ""
+cache_dir = ""
+
+
+feeds = {}
+
+def update_date_to_file(filename,date):
+	"Update the last episod air date on the related file"
+	f = open(cache_dir + filename,"w")
+	f.write(date)
+	f.close()
+def get_date_from_file(filename):
+	"Get the last episod air date on the related file"
+	f = open(cache_dir + filename,"r")
+	old_date = f.read()
+	f.close()
+	return old_date
+def check_for_episodes(feed,show_title,last_episode_date,old_date):
+	"Check for new episodes in the current feed. Returns a summary of new episodes "
+	# Check if there is/are new episode/s
+	to_notify = ""
+	new_episodes = False
+	for item in feed["items"]:
+		episode_title = item["title"]
+		episode_date = dateutil.parser.parse(item["published"])
+		link = item["link"]
+		if old_date < episode_date:
+			to_notify += "Episode: "+episode_title + "\n" + "Link: "+ link + "\n\n"
+			new_episodes = True
+	if new_episodes:
+		# Set the new date
+		update_date_to_file(show_title,str(last_episode_date))
+	return to_notify
+def mail(to, subject, text, attach):
+	"Send an email with gmail"
+	msg = MIMEMultipart()
+
+	msg['From'] = gmail_user
+	msg['To'] = to
+	msg['Subject'] = subject
+
+	msg.attach(MIMEText(text))
+
+	part = MIMEBase('application', 'octet-stream')
+	#part.set_payload(open(attach, 'rb').read())
+	Encoders.encode_base64(part)
+	#part.add_header('Content-Disposition',
+	# 'attachment; filename="%s"' % os.path.basename(attach))
+	#msg.attach(part)
+
+	mailServer = smtplib.SMTP("smtp.gmail.com", 587)
+	mailServer.ehlo()
+	mailServer.starttls()
+	mailServer.ehlo()
+	mailServer.login(gmail_user, gmail_pwd)
+	mailServer.sendmail(gmail_user, to, msg.as_string())
+	# Should be mailServer.quit(), but that crashes...
+	mailServer.close()
+def apply_workflow(rss_url):
+	"Parse feed, check for new episodes and if new episodes notify by email"
+	#Parse feed using feedparser
+	feed = feedparser.parse(rss_url)
+
+	# show title
+	show_title = feed["feed"]["title"]
+
+	# last tv episode is always the first on the feed list
+	last_episode = feed["items"][0]
+	last_episode_title = last_episode["title"]
+	last_episode_date = dateutil.parser.parse(last_episode["published"])
+
+	to_notify = ""
+
+	try:
+		# Get and parse old_date
+		old_date = dateutil.parser.parse(get_date_from_file(show_title))
+	  # Check for new episodes
+		to_notify += check_for_episodes(feed,show_title,last_episode_date,old_date)
+	except IOError:
+		# File not created yet
+		# All episodes are new
+		old_date = dateutil.parser.parse("0001-01-01 00:00:00+03:00")
+	  # Check for new episodes
+		to_notify += check_for_episodes(feed,show_title,last_episode_date,old_date)
+
+	# if there is/are new tv episode/s
+	if to_notify:
+		# notify by mail
+		mail(my_email,show_title,to_notify.encode('ascii','replace'),"")
+
+for feed in feeds:
+	apply_workflow(feeds[feed])
+
+
+
+
+
+
