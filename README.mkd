@@ -39,7 +39,7 @@ feeds = {
 
 - I use a cron deamon to execute tsn each day at 10 AM (type crontab -e ):
 ```bash
-  0       10       *       *       *  ./[The location of tsn_deamon_file]/tsn_daemon
+  0       10       *       *       *  /[The location of tsn_deamon_file]/tsn_daemon
 ```
 
 - Enjoy
